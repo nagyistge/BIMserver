@@ -1,0 +1,7 @@
+Builds/build/builds/**
+*.html
+*.css
+*.map
+*.png
+*.js
+*.gif

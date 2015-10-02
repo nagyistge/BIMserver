@@ -396,6 +396,7 @@ public abstract class IfcStepDeserializer extends EmfDeserializer {
 							throw new DeserializeException(lineNumber, classifier.getName() + " expects " + expected + " fields, but less found");
 						}
 						lastIndex = nextIndex;
+						if(val.length() == 0)continue; //if the field is empty
 						char firstChar = val.charAt(0);
 						if (firstChar == '$') {
 							object.eUnset(structuralFeature);

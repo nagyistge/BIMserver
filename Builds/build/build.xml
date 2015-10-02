@@ -19,7 +19,11 @@
 	<target name="serverlib">
 		<ant antfile="bimserverlib.build.xml" target="Build ServerLib"></ant>
 	</target>
+	<target name="misc">
+		<ant antfile="common.build.xml" target="MiscSerializers"></ant>
+	</target>
 	<target name="source" description="Create an eclipse workspace zipfile">
 		<ant antfile="source.build.xml" target="Build Source"></ant>
 	</target>
+	
 </project>

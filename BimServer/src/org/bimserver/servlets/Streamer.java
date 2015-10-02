@@ -2,17 +2,17 @@ package org.bimserver.servlets;
 
 /******************************************************************************
  * Copyright (C) 2009-2015  BIMserver.org
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *****************************************************************************/
@@ -25,6 +25,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.GregorianCalendar;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.BufferedOutputStream;
 import org.apache.commons.io.output.NullWriter;
 import org.bimserver.BimServer;
 import org.bimserver.endpoints.EndPoint;
@@ -68,7 +71,7 @@ public class Streamer implements EndPoint {
 		welcome.add("welcome", new JsonPrimitive(new GregorianCalendar().getTimeInMillis()));
 		streamingSocketInterface.send(welcome);
 	}
-	
+
 	public void onText(Reader reader) {
 		JsonReader jsonreader = new JsonReader(reader);
 		JsonParser parser = new JsonParser();
@@ -88,6 +91,10 @@ public class Streamer implements EndPoint {
 								boolean writeMessage = true;
 								int counter = 0;
 								long bytes = 0;
+								File file = new File("download_buffer.dat");
+								LOGGER.info("write the content to buffer file");
+								FileOutputStream  fout = new FileOutputStream(file);
+								BufferedOutputStream st_out = new BufferedOutputStream(fout);
 								do {
 									ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 									DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
@@ -106,10 +113,13 @@ public class Streamer implements EndPoint {
 									if (byteArrayOutputStream.size() > 8) {
 										bytes += byteArray.length;
 										streamingSocketInterface.send(byteArray, 0, byteArray.length);
+										st_out.write(byteArray);
 										counter++;
 									}
 								} while (writeMessage);
 								LOGGER.info(counter + " messages written " + Formatters.bytesToString(bytes));
+								st_out.close();
+								fout.close();
 							} catch (IOException e) {
 								LOGGER.error("", e);
 							}
@@ -125,7 +135,7 @@ public class Streamer implements EndPoint {
 				uoid = serviceMap.getBimServerAuthInterface().getLoggedInUser().getOid();
 
 				this.endpointid = bimServer.getEndPointManager().register(this);
-				
+
 				JsonObject enpointMessage = new JsonObject();
 				enpointMessage.add("endpointid", new JsonPrimitive(endpointid));
 				streamingSocketInterface.send(enpointMessage);
@@ -167,7 +177,7 @@ public class Streamer implements EndPoint {
 	public long getUoid() {
 		return uoid;
 	}
-	
+
 	@Override
 	public String toString() {
 		return "" + endpointid;

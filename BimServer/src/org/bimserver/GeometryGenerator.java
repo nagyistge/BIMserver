@@ -2,17 +2,17 @@ package org.bimserver;
 
 /******************************************************************************
  * Copyright (C) 2009-2015  BIMserver.org
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *****************************************************************************/
@@ -89,7 +89,7 @@ import org.slf4j.LoggerFactory;
 
 public class GeometryGenerator {
 	private static final Logger LOGGER = LoggerFactory.getLogger(GeometryGenerator.class);
-	
+
 	private final BimServer bimServer;
 	private final Map<Integer, GeometryData> hashes = new ConcurrentHashMap<Integer, GeometryData>();
 
@@ -106,7 +106,7 @@ public class GeometryGenerator {
 	public GeometryGenerator(final BimServer bimServer) {
 		this.bimServer = bimServer;
 	}
-	
+
 	public class Runner implements Runnable {
 
 		private EClass eClass;
@@ -137,12 +137,12 @@ public class GeometryGenerator {
 			this.bigMap = bigMap;
 			this.renderEngineFilter = renderEngineFilter;
 		}
-		
+
 		@Override
 		public void run() {
 			targetModel.generateMinimalExpressIds();
 
-			Serializer ifcSerializer = ifcSerializerPlugin.createSerializer(new PluginConfiguration());
+			Serializer ifcSerializer = ifcSerializerPlugin.createSerializer(new PluginConfiguration());//prepare to write the geometry data
 			RenderEngine renderEngine = null;
 			try {
 				renderEngine = renderEnginePlugin.createRenderEngine(new PluginConfiguration(), model.getPackageMetaData().getSchema().getEPackageName());
@@ -173,7 +173,7 @@ public class GeometryGenerator {
 
 					List<IdEObject> allWithSubTypes = null;
 					if (eClass == null) {
-						allWithSubTypes = targetModel.getAllWithSubTypes(packageMetaData.getEClass("IfcProduct"));
+						allWithSubTypes = targetModel.getAllWithSubTypes(packageMetaData.getEClass("IfcProduct"));//IfcProduct is the root of IFC geometry object
 					} else {
 						allWithSubTypes = targetModel.getAll(eClass);
 					}
@@ -182,7 +182,7 @@ public class GeometryGenerator {
 						if (representation != null && ((List<?>) representation.eGet(representationsFeature)).size() > 0) {
 							try {
 								RenderEngineInstance renderEngineInstance = renderEngineModel.getInstanceFromExpressId(ifcProduct.getExpressId());
-								RenderEngineGeometry geometry = renderEngineInstance.generateGeometry();
+								RenderEngineGeometry geometry = renderEngineInstance.generateGeometry();//Geometry information
 								boolean translate = true;
 								if (geometry == null || geometry.getIndices().length == 0) {
 									renderEngineModel.setFilter(renderEngineFilterTransformed);
@@ -216,13 +216,13 @@ public class GeometryGenerator {
 											volume = -volume;
 										}
 										geometryInfo.setVolume(volume);
-										
+
 //										EStructuralFeature guidFeature = ifcProduct.eClass().getEStructuralFeature("GlobalId");
 //										String guid = (String) ifcProduct.eGet(guidFeature);
 //										System.out.println(guid + ": " + "Area: " + area + ", Volume: " + volume);
 									} catch (NotImplementedException e) {
 									}
-									
+
 									GeometryData geometryData = null;
 									if (store) {
 										geometryData = model.createAndAdd(GeometryPackage.eINSTANCE.getGeometryData(), databaseSession.newOid(GeometryPackage.eINSTANCE.getGeometryData()));
@@ -235,7 +235,7 @@ public class GeometryGenerator {
 									geometryData.setVertices(floatArrayToByteArray(geometry.getVertices()));
 									geometryData.setMaterialIndices(intArrayToByteArray(geometry.getMaterialIndices()));
 									geometryData.setNormals(floatArrayToByteArray(geometry.getNormals()));
-									
+
 									geometryInfo.setPrimitiveCount(geometry.getIndices().length / 3);
 
 									if (geometry.getMaterialIndices() != null && geometry.getMaterialIndices().length > 0) {
@@ -271,9 +271,9 @@ public class GeometryGenerator {
 
 									geometryInfo.setData(geometryData);
 
-									long length = (geometryData.getIndices() != null ? geometryData.getIndices().length : 0) + 
-												  (geometryData.getVertices() != null ? geometryData.getVertices().length : 0) + 
-												  (geometryData.getNormals() != null ? geometryData.getNormals().length : 0) + 
+									long length = (geometryData.getIndices() != null ? geometryData.getIndices().length : 0) +
+												  (geometryData.getVertices() != null ? geometryData.getVertices().length : 0) +
+												  (geometryData.getNormals() != null ? geometryData.getNormals().length : 0) +
 												  (geometryData.getMaterials() != null ? geometryData.getMaterials().length : 0) +
 												  (geometryData.getMaterialIndices() != null ? geometryData.getMaterialIndices().length : 0);
 
@@ -311,7 +311,7 @@ public class GeometryGenerator {
 								LOGGER.error("", e);
 							}
 						}
-					}								
+					}
 				} finally {
 					in.close();
 					renderEngineModel.close();
@@ -327,7 +327,7 @@ public class GeometryGenerator {
 			}
 		}
 	}
-	
+
 	@SuppressWarnings("unchecked")
 	public void generateGeometry(long uoid, final PluginManager pluginManager, final DatabaseSession databaseSession, final IfcModelInterface model, final int pid, final int rid,
 			final boolean store, GeometryCache geometryCache) throws BimserverDatabaseException, GeometryGeneratingException {
@@ -378,7 +378,7 @@ public class GeometryGenerator {
 			settings.setGenerateNormals(true);
 			settings.setGenerateTriangles(true);
 			settings.setGenerateWireFrame(false);
-			
+
 			final RenderEngineFilter renderEngineFilter = new RenderEngineFilter();
 
 			if (maxSimultanousThreads == 1) {
@@ -392,14 +392,14 @@ public class GeometryGenerator {
 						classes.add(object.eClass());
 					}
 				}
-				
+
 				if (classes.size() == 0) {
 					return;
 				}
-				
+
 				classes.remove(packageMetaData.getEClass("IfcAnnotation"));
 				classes.remove(packageMetaData.getEClass("IfcOpeningElement"));
-				
+
 				LOGGER.debug("Using " + maxSimultanousThreads + " processes for geometry generation");
 				ThreadPoolExecutor executor = new ThreadPoolExecutor(maxSimultanousThreads, maxSimultanousThreads, 24, TimeUnit.HOURS, new ArrayBlockingQueue<Runnable>(classes.size()));
 
@@ -416,9 +416,9 @@ public class GeometryGenerator {
 					ModelHelper modelHelper = new ModelHelper(bimServer.getMetaDataManager(), targetModel);
 					modelHelper.setOidProvider(oidProvider);
 					modelHelper.setObjectIDM(idm);
-					
+
 					IdEObject newOwnerHistory = modelHelper.copyBasicObjects(model, bigMap);
-					
+
 					for (IdEObject idEObject : model.getAll(eClass)) {
 						IdEObject newObject = modelHelper.copy(idEObject, false, ModelHelper.createObjectIdm(idEObject.eClass()));
 						modelHelper.copyDecomposes(idEObject, newOwnerHistory);
@@ -439,9 +439,9 @@ public class GeometryGenerator {
 					executor.submit(new Runner(eClass, renderEnginePlugin, databaseSession, settings, store, targetModel, ifcSerializerPlugin, model, pid, rid, bigMap, renderEngineFilter));
 				}
 				executor.shutdown();
-				executor.awaitTermination(24, TimeUnit.HOURS);				
+				executor.awaitTermination(24, TimeUnit.HOURS);
 			}
-			
+
 			long end = System.nanoTime();
 			LOGGER.info("Rendertime: " + ((end - start) / 1000000) + "ms, " + "Reused: " + Formatters.bytesToString(bytesSaved.get()) + ", Total: " + Formatters.bytesToString(totalBytes.get()) + ", Final: " + Formatters.bytesToString(totalBytes.get() - bytesSaved.get()));
 		} catch (Exception e) {
@@ -449,7 +449,7 @@ public class GeometryGenerator {
 			throw new GeometryGeneratingException(e);
 		}
 	}
-	
+
 	private int hash(GeometryData geometryData) {
 		int hashCode = 0;
 		if (geometryData.getIndices() != null) {
@@ -533,7 +533,7 @@ public class GeometryGenerator {
 	 * triangles are indeed the same and the order of the vertices is also the
 	 * same (shifts are not allowed) This function can probably be optimized for
 	 * speed and also the LOC can probably be reduced
-	 * 
+	 *
 	 * @param originalV1
 	 * @param originalV2
 	 * @param originalV3
@@ -650,7 +650,7 @@ public class GeometryGenerator {
 
 	/**
 	 * Get the angle in radians between two planes
-	 * 
+	 *
 	 * @param v1
 	 * @param v2
 	 * @param v3

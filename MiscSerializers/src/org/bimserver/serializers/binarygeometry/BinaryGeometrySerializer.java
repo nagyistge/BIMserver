@@ -2,17 +2,17 @@ package org.bimserver.serializers.binarygeometry;
 
 /******************************************************************************
  * Copyright (C) 2009-2015  BIMserver.org
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *****************************************************************************/
@@ -68,22 +68,22 @@ public class BinaryGeometrySerializer extends AbstractGeometrySerializer {
 
 	private void writeGeometries(OutputStream outputStream) throws IOException {
 		long start = System.nanoTime();
-
+    int bytes = 0;
 		LittleEndianDataOutputStream dataOutputStream = new LittleEndianDataOutputStream(outputStream);
 		// Identifier for clients to determine if this server is even serving binary geometry
 		dataOutputStream.writeUTF("BGS");
-		
-		// Version of the current format being outputted, should be changed for every (released) change in protocol 
+		bytes += 3 + 2;
+		// Version of the current format being outputted, should be changed for every (released) change in protocol
 		dataOutputStream.writeByte(FORMAT_VERSION);
-		
+		bytes += 1;
 		Bounds modelBounds = new Bounds();
 		int nrObjects = 0;
-		
+
 		// All access to EClass is being done generically to support multiple IFC schema's with 1 serializer
 		EClass productClass = getModel().getPackageMetaData().getEClass("IfcProduct");
-		
+
 		List<IdEObject> products = getModel().getAllWithSubTypes(productClass);
-		
+
 		// First iteration, to determine number of objects with geometry and calculate model bounds
 		for (IdEObject ifcProduct : products) {
 			GeometryInfo geometryInfo = (GeometryInfo) ifcProduct.eGet(ifcProduct.eClass().getEStructuralFeature("geometry"));
@@ -94,82 +94,100 @@ public class BinaryGeometrySerializer extends AbstractGeometrySerializer {
 				nrObjects++;
 			}
 		}
+		//copy from BinaryGeometryMessagingSerializer, to make javascript happy
+		int skip = 4 - bytes % 4;
+		if(skip != 0 && skip != 4) {
+			dataOutputStream.write(new byte[skip]);
+		}
+		bytes += skip;
+
 		modelBounds.writeTo(dataOutputStream);
+		bytes += 6 * 4;
 		dataOutputStream.writeInt(nrObjects);
+		bytes += 4;
 		int bytesSaved = 0;
 		int bytesTotal = 0;
-		
+
 		// Keeping track of geometry already sent, this can be used for instancing of reused geometry
 		Set<Long> concreteGeometrySent = new HashSet<>();
-		
+
 		// Flushing here so the client can show progressbar etc...
 		dataOutputStream.flush();
-		
-		int bytes = 6;
+
+
 		int counter = 0;
-		
+
 		// Second iteration actually writing the geometry
 		for (IdEObject ifcProduct : products) {
 			GeometryInfo geometryInfo = (GeometryInfo) ifcProduct.eGet(ifcProduct.eClass().getEStructuralFeature("geometry"));
 			if (geometryInfo != null && geometryInfo.getTransformation() != null) {
+				Long roid = model.getPidRoidMap().get(ifcProduct.getPid());
+				dataOutputStream.writeLong(roid);//it is project id;
+				dataOutputStream.writeLong(ifcProduct.getOid()); // object id
+				bytes += 4;
 				String type = ifcProduct.eClass().getName();
 				dataOutputStream.writeUTF(type);
-				dataOutputStream.writeLong(ifcProduct.getOid());
+				bytes += type.getBytes(Charsets.UTF_8).length + 2;
 
 				GeometryData geometryData = geometryInfo.getData();
 				byte[] vertices = geometryData.getVertices();
-				
+
 				// BEWARE, ByteOrder is always LITTLE_ENDIAN, because that's what GPU's seem to prefer, Java's ByteBuffer default is BIG_ENDIAN though!
-				
+
 				bytesTotal += vertices.length;
+
 				byte geometryType = concreteGeometrySent.contains(geometryData.getOid()) ? GEOMETRY_TYPE_INSTANCE : GEOMETRY_TYPE_TRIANGLES;
+
 				dataOutputStream.write(geometryType);
-				
-				bytes += (type.getBytes(Charsets.UTF_8).length + 3);
-				
+				bytes += 1;
+
 				// This is an ugly hack to align the bytes, but for 2 different kinds of output (this first one is the websocket implementation)
-				int skip = 4 - (bytes % 4); // TODO fix
+				skip = 4 - (bytes % 4); // TODO fix
 				if(skip != 0 && skip != 4) {
 					dataOutputStream.write(new byte[skip]);
 				}
-				
-				bytes = 0;
-				
+				bytes += skip;
+
 				dataOutputStream.write(geometryInfo.getTransformation());
-				
+				bytes += 16 * 4;
+
 				if (concreteGeometrySent.contains(geometryData.getOid())) {
+					//we need to set a tag for this situation.
 					// Reused geometry, only send the id of the reused geometry data
 					dataOutputStream.writeLong(geometryData.getOid());
 					bytesSaved += vertices.length;
 				} else {
 					ByteBuffer vertexByteBuffer = ByteBuffer.wrap(vertices);
 					dataOutputStream.writeLong(geometryData.getOid());
-					
-					Bounds objectBounds = new Bounds(geometryInfo.getMinBounds(), geometryInfo.getMaxBounds());
-					objectBounds.writeTo(dataOutputStream);
-					
+
 					ByteBuffer indicesBuffer = ByteBuffer.wrap(geometryData.getIndices());
 					dataOutputStream.writeInt(indicesBuffer.capacity() / 4);
 					dataOutputStream.write(indicesBuffer.array());
-					
+
 					dataOutputStream.writeInt(vertexByteBuffer.capacity() / 4);
 					dataOutputStream.write(vertexByteBuffer.array());
-					
+
 					ByteBuffer normalsBuffer = ByteBuffer.wrap(geometryData.getNormals());
 					dataOutputStream.writeInt(normalsBuffer.capacity() / 4);
 					dataOutputStream.write(normalsBuffer.array());
-					
+
+					//put it below to enable viewer to detect model reuse.
+					Bounds objectBounds = new Bounds(geometryInfo.getMinBounds(), geometryInfo.getMaxBounds());
+					objectBounds.writeTo(dataOutputStream);
+
+					LOGGER.info("dump bound " + objectBounds.toString());
+
 					// Only when materials are used we send them
 					if (geometryData.getMaterials() != null) {
 						ByteBuffer materialsByteBuffer = ByteBuffer.wrap(geometryData.getMaterials());
-						
+
 						dataOutputStream.writeInt(materialsByteBuffer.capacity() / 4);
 						dataOutputStream.write(materialsByteBuffer.array());
 					} else {
 						// No materials used
 						dataOutputStream.writeInt(0);
 					}
-					
+
 					concreteGeometrySent.add(geometryData.getOid());
 				}
 				counter++;
